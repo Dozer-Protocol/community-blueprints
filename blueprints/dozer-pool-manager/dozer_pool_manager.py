@@ -1630,6 +1630,7 @@ class DozerPoolManager(Blueprint):
             reserve_in = pool.reserve_a
             reserve_out = pool.reserve_b
         else:
+            assert token_in == pool.token_b, f"Token {token_in} is not part of pool {pool_key}"
             reserve_in = pool.reserve_b
             reserve_out = pool.reserve_a
 
@@ -1779,6 +1780,7 @@ class DozerPoolManager(Blueprint):
             reserve_in = reserve_a
             reserve_out = reserve_b
         else:
+            assert token_in == token_b, f"Token {token_in} is not part of pool"            
             reserve_in = reserve_b
             reserve_out = reserve_a
 
@@ -1887,6 +1889,7 @@ class DozerPoolManager(Blueprint):
                 reserve_a_after = new_reserve_a
                 reserve_b_after = new_reserve_b
         else:
+            assert token_out == token_b, f"Token {token_out} is not part of pool"
             if amount_a > 0:
                 swap_reserve_in = Amount(new_reserve_a + amount_a)
                 swap_reserve_out = Amount(new_reserve_b)
