@@ -372,6 +372,9 @@ class DozerPoolManager(Blueprint):
         # Initialize pause state
         self.paused = False
 
+        # Initialize TWAP window to 4 hours (14400 seconds)
+        self.twap_window = 14400
+
         self.log.info('contract initialized',
                       owner=str(self.owner),
                       protocol_fee=self.default_protocol_fee,
