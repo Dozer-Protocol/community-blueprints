@@ -1747,7 +1747,13 @@ class DozerPoolManager(Blueprint):
             max_amount = 0
             for token in unvisited:
                 amount, hops = distances[token]
-                if amount > max_amount:
+                # Deterministic selection: primary key is output amount, secondary
+                # key is the token bytes. A total order makes the result independent
+                # of `unvisited` set iteration order, which is required for consensus
+                # (ties would otherwise be broken by non-deterministic hash order).
+                if amount > max_amount or (
+                    amount == max_amount and current is not None and token < current
+                ):
                     max_amount = amount
                     current = token
             if current is None or max_amount == 0:
@@ -1906,7 +1912,14 @@ class DozerPoolManager(Blueprint):
             min_amount = Amount(2 ** 256 - 1)
             for token in unvisited:
                 amount, _ = distances[token]
-                if token in unvisited and amount < min_amount:
+                # Deterministic selection: primary key is required input amount,
+                # secondary key is the token bytes. A total order makes the result
+                # independent of `unvisited` set iteration order, which is required
+                # for consensus (ties would otherwise be broken by non-deterministic
+                # hash order).
+                if amount < min_amount or (
+                    amount == min_amount and current is not None and token < current
+                ):
                     min_amount = amount
                     current = token
             if current is None or min_amount == Amount(2 ** 256 - 1):

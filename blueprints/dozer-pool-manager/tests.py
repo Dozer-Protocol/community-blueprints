@@ -2730,6 +2730,65 @@ class DozerPoolManagerBlueprintTestCase(BlueprintTestCase):
         self.assertEqual(result.amount_out, amount_out)
         self._check_balance()
 
+    def test_find_best_swap_path_tie_break_is_deterministic(self):
+        """Dijkstra routing must break ties deterministically, not by set order.
+
+        Regression for the consensus bug where ``_dijkstra_shortest_path`` selected
+        the frontier node by iterating an ``unvisited`` set. When two routes yield an
+        identical output the winner depended on non-deterministic set iteration order
+        (hash-seed dependent), so different nodes could commit different paths.
+
+        Here two intermediates B and C give a perfectly symmetric pair of routes:
+        A->B->D and A->C->D use pools with identical reserves and fees, so both
+        produce the exact same output. The fix imposes a total order — ties are broken
+        by the smallest TokenUid — so the chosen route must always pass through
+        ``min(token_b, token_c)``, independent of iteration order.
+        """
+        # Symmetric pools: every leg has identical reserves and fee, so A->B == A->C
+        # and B->D == C->D down to the base unit.
+        reserve = 10000_00
+        pool_ab, _ = self._create_pool(
+            self.token_a, self.token_b, fee=3, reserve_a=reserve, reserve_b=reserve
+        )
+        pool_ac, _ = self._create_pool(
+            self.token_a, self.token_c, fee=3, reserve_a=reserve, reserve_b=reserve
+        )
+        pool_bd, _ = self._create_pool(
+            self.token_b, self.token_d, fee=3, reserve_a=reserve, reserve_b=reserve
+        )
+        pool_cd, _ = self._create_pool(
+            self.token_c, self.token_d, fee=3, reserve_a=reserve, reserve_b=reserve
+        )
+        # Only signed pools are routable.
+        self._sign_pool(self.token_a, self.token_b, 3)
+        self._sign_pool(self.token_a, self.token_c, 3)
+        self._sign_pool(self.token_b, self.token_d, 3)
+        self._sign_pool(self.token_c, self.token_d, 3)
+
+        # The deterministic tie-break selects the smaller-bytes intermediate token.
+        if self.token_b < self.token_c:
+            expected_path = f"{pool_ab},{pool_bd}"
+        else:
+            expected_path = f"{pool_ac},{pool_cd}"
+
+        result = self.runner.call_view_method(
+            self.nc_id,
+            "find_best_swap_path",
+            100_00,
+            self.token_a,
+            self.token_d,
+            3,
+        )
+
+        # Sanity: a 2-hop route through one of the symmetric intermediates was found.
+        self.assertGreater(result.amount_out, 0)
+        self.assertIn(
+            result.path,
+            {f"{pool_ab},{pool_bd}", f"{pool_ac},{pool_cd}"},
+        )
+        # The tie must resolve to the smaller-token route, deterministically.
+        self.assertEqual(result.path, expected_path)
+
     def test_swap_exact_out_3hop_inner_boundary_needs_no_second_check(self):
         """3-hop exact-output: a discontinuity at the hop2->hop3 boundary is
         unconstructible, so no second continuity check is needed.
